@@ -1,38 +1,29 @@
 import express from 'express';
 import cors from 'cors';
-import dotenv from 'dotenv'; // For environment variables
-import { exec } from "child_process"; // Still needed for file system operations
+import dotenv from 'dotenv';
+import { exec } from "child_process";
 import { promisify } from "util";
 import fs from 'fs/promises';
 
-// Load environment variables from .env file at the very beginning
 dotenv.config();
 
 const asyncExecute = promisify(exec);
 
-// Retrieve your OpenRouter API Key from environment variables
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
-
-// --- Debugging check: Confirm API Key is loaded ---
-console.log("[BACKEND] OPENROUTER_API_KEY value during init:", OPENROUTER_API_KEY ? "Loaded (key length: " + OPENROUTER_API_KEY.length + ")" : "UNDEFINED");
 
 if (!OPENROUTER_API_KEY) {
   console.error("❌ Error: OPENROUTER_API_KEY environment variable is not set. Please ensure it's in your .env file.");
-  process.exit(1); // Exit the process if the API key is missing
+  process.exit(1);
 }
-
-// --- Tool Definitions (These remain the same as they are local file system operations) ---
 
 async function executeCommand({ command }) {
   try {
     const { stdout, stderr } = await asyncExecute(command);
     if (stderr) {
-      console.warn(`[BACKEND] Command stderr for "${command}": ${stderr}`);
       return `❌ Warning/Error: ${stderr}`;
     }
     return `✅ Success: ${stdout || 'Command executed successfully.'}`;
   } catch (error) {
-    console.error(`[BACKEND] Error executing command "${command}":`, error);
     return `❌ Error: ${error.message}`;
   }
 }
@@ -46,24 +37,14 @@ async function writeFileContent({ filePath, content }) {
     await fs.writeFile(filePath, content);
     return `✅ File "${filePath}" written successfully.`;
   } catch (err) {
-    console.error(`[BACKEND] Error writing to "${filePath}":`, err);
     return `❌ Error writing to "${filePath}": ${err.message}`;
   }
 }
 
-// --- Agent Logic for Website Generation (MODIFIED FOR OPENROUTER/DEEPSEEK) ---
-
-// We'll simplify the "agent" loop here because OpenRouter API doesn't directly support
-// Gemini's function calling in the same way. We'll ask the model to provide the code
-// directly and then parse it.
-
 async function generateWebsiteWithDeepSeek(userProblem) {
     const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
-    // Use deepseek/deepseek-chat for general purposes, or deepseek/deepseek-r1 for reasoning tasks.
-    // OpenRouter provides free models that are often aliased like this.
-    const MODEL_NAME = "deepseek/deepseek-chat"; // This is the recommended free model
+    const MODEL_NAME = "deepseek/deepseek-chat";
 
-    // The prompt needs to guide DeepSeek to output a parseable structure
     const systemInstruction = `You are an expert Website builder. Your goal is to create the frontend code (HTML, CSS, and JavaScript) based on the user's prompt. Provide ALL three files (HTML, CSS, JS) if the user prompt implies dynamic behavior (e.g., a calculator, interactive elements). If the user asks for a static page, then generate only the HTML and CSS.
 
     You must output the code in a structured JSON format. For each file type (html, css, js), provide the full content. If a file type is not needed, its content should be an empty string.
@@ -90,9 +71,8 @@ async function generateWebsiteWithDeepSeek(userProblem) {
             headers: {
                 'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
                 'Content-Type': 'application/json',
-                // Optional: For OpenRouter leaderboards/analytics
-                'HTTP-Referer': 'http://localhost:5173', // Your frontend URL
-                'X-Title': 'Orbit Website Builder Backend' // Your app title
+                'HTTP-Referer': 'https://spectacular-hotteok-7139fa.netlify.app',
+                'X-Title': 'Orbit Website Builder Backend'
             },
             body: JSON.stringify({
                 model: MODEL_NAME,
@@ -100,54 +80,41 @@ async function generateWebsiteWithDeepSeek(userProblem) {
                     { role: 'system', content: systemInstruction },
                     { role: 'user', content: userProblem }
                 ],
-                temperature: 0.7, // Adjust for creativity vs. consistency
-                max_tokens: 3000, // Increase if you need longer responses
+                temperature: 0.7,
+                max_tokens: 3000,
             }),
         });
 
         if (!response.ok) {
             const errorData = await response.json();
-            console.error(`[BACKEND] DeepSeek API Error: Status ${response.status}`, errorData);
             throw new Error(`DeepSeek API error (${response.status}): ${JSON.stringify(errorData)}`);
         }
 
         const data = await response.json();
         const rawContent = data.choices[0].message.content;
-        console.log("[BACKEND] Raw content from DeepSeek:", rawContent);
 
-        // --- Parsing the AI's response to extract JSON ---
         const jsonMatch = rawContent.match(/```json\n([\s\S]*?)\n```/);
 
         if (jsonMatch && jsonMatch[1]) {
             let parsedOutput;
             try {
                 parsedOutput = JSON.parse(jsonMatch[1]);
-                // Ensure the keys are present, even if empty strings
                 const htmlContent = parsedOutput.html || '';
                 const cssContent = parsedOutput.css || '';
                 const jsContent = parsedOutput.js || '';
 
-                // --- Execute file operations (This part is still local) ---
                 const folderName = userProblem.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-*|-*$/g, '') || 'generated-website';
                 const projectPath = `./generated_websites/${folderName}`;
 
-                console.log(`[BACKEND] Creating directory: ${projectPath}`);
                 await executeCommand({ command: `mkdir ${projectPath}` });
 
-                // Use touch if you want to create empty files first, then write.
-                // For simplicity here, writeFileContent will create parent dirs if needed.
-                console.log(`[BACKEND] Writing HTML to ${projectPath}/index.html`);
                 await writeFileContent({ filePath: `${projectPath}/index.html`, content: htmlContent });
 
-                console.log(`[BACKEND] Writing CSS to ${projectPath}/style.css`);
                 await writeFileContent({ filePath: `${projectPath}/style.css`, content: cssContent });
 
                 if (jsContent) {
-                    console.log(`[BACKEND] Writing JS to ${projectPath}/script.js`);
                     await writeFileContent({ filePath: `${projectPath}/script.js`, content: jsContent });
                 }
-
-                console.log("[BACKEND] ✅ DeepSeek agent finished generating website and files.");
 
                 return {
                     status: "success",
@@ -158,48 +125,54 @@ async function generateWebsiteWithDeepSeek(userProblem) {
                 };
 
             } catch (jsonParseError) {
-                console.error("[BACKEND] ❌ Failed to parse JSON from DeepSeek response:", jsonParseError);
                 return { status: "error", message: `AI response format error: Could not parse JSON from model. Raw content: ${rawContent.substring(0, 200)}...` };
             }
         } else {
-            console.error("[BACKEND] ❌ DeepSeek response did not contain expected JSON block.");
             return { status: "error", message: `AI response format error: JSON block not found in model's output. Raw content: ${rawContent.substring(0, 200)}...` };
         }
 
     } catch (error) {
-        console.error("[BACKEND] ❌ Error during DeepSeek API call or processing:", error);
         return { status: "error", message: `Error during AI generation: ${error.message}` };
     }
 }
 
-
-// --- Express App Setup (Mostly the same) ---
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+const allowedOrigins = [
+  'http://localhost:5173',
+  'https://spectacular-hotteok-7139fa.netlify.app'
+];
+
 app.use(cors({
-    origin: 'http://localhost:5173', // Your frontend URL
-    methods: ['GET', 'POST'],
-    allowedHeaders: ['Content-Type'],
+  origin: function (origin, callback) {
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.indexOf(origin) === -1) {
+      const msg = 'The CORS policy for this site does not allow access from the specified Origin.';
+      return callback(new Error(msg), false);
+    }
+    return callback(null, true);
+  },
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  credentials: true,
+  allowedHeaders: ['Content-Type', 'Authorization'],
 }));
+
 app.use(express.json());
 
 app.post('/generate-website', async (req, res) => {
-    const { prompt, theme } = req.body; // Assuming 'style' is now part of 'theme' or handled in prompt
+    const { prompt, theme } = req.body;
 
     if (!prompt) {
         return res.status(400).json({ status: "error", message: "Prompt is required." });
     }
 
-    // Adapt the user's prompt for DeepSeek's single-turn generation
     const userProblem = `Create a website for the following description: "${prompt}". Use a "${theme}" theme. Ensure all necessary HTML, CSS, and JavaScript code is provided in the final structured JSON response.`;
-    console.log(`[BACKEND] Received generation request: "${prompt}" (Theme: "${theme}")`);
 
     try {
-        const result = await generateWebsiteWithDeepSeek(userProblem); // Call the new function
+        const result = await generateWebsiteWithDeepSeek(userProblem);
         res.json(result);
     } catch (error) {
-        console.error("[BACKEND] Uncaught error in /generate-website endpoint:", error);
         res.status(500).json({ status: "error", message: `Failed to process website generation request: ${error.message}` });
     }
 });
@@ -209,5 +182,4 @@ app.get('/', (req, res) => {
 });
 
 app.listen(PORT, () => {
-    console.log(`[BACKEND] Server running on http://localhost:${PORT}`);
 });
