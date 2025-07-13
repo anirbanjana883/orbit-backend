@@ -54,22 +54,19 @@ Your generated code must adhere to modern web standards:
 - CSS: Responsive (using media queries, flexbox, or grid), clean, and visually appealing based on the theme. Avoid inline styles where possible.
 - JavaScript: Modular, efficient, and interactive as per the prompt.
 
-You must output the code in a structured JSON format. For each file type (html, css, js), provide the full content. If a file type is not explicitly needed or implied by the prompt, its content should be an empty string.
-
-Example of the expected JSON output format for a multi-page site:
+CRITICAL: Your entire response MUST be a single JSON object wrapped in triple backticks, like this:
 \`\`\`json
 {
-  "html": "<!DOCTYPE html>\\n<html lang=\\"en\\">\\n<head>\\n  <meta charset=\\"UTF-8\\">\\n  <meta name=\\"viewport\\" content=\\"width=device-width, initial-scale=1.0\\">\\n  <title>Dynamic Multi-Page Site</title>\\n  <link rel=\\"stylesheet\\" href=\\"style.css\\">\\n</head>\\n<body>\\n  <header>\\n    <nav>\\n      <button onclick=\\"navigateTo('home-page')\\">Home</button>\\n      <button onclick=\\"navigateTo('about-page')\\">About</button>\\n      <button onclick=\\"navigateTo('contact-page')\\">Contact</button>\\n    </nav>\\n  </header>\\n\\n  <main>\\n    <section id=\\"home-page\\" class=\\"page\\">\\n      <h1>Welcome to Our Site!</h1>\\n      <p>This is the home page content.</p>\\n    </section>\\n\\n    <section id=\\"about-page\\" class=\\"page\\" style=\\"display:none;\\">\\n      <h2>About Us</h2>\\n      <p>Learn more about our mission.</p>\\n    </section>\\n\\n    <section id=\\"contact-page\\" class=\\"page\\" style=\\"display:none;\\">\\n      <h3>Contact Us</h3>\\n      <form>\\n        <input type=\\"text\\" placeholder=\\"Your Name\\">\\n        <button type=\\"submit\\">Send</button>\\n      </form>\\n    </section>\\n  </main>\\n\\n  <script src=\\"script.js\\"></script>\\n</body>\\n</html>",
-  "css": "body {\\n  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;\\n  margin: 0;\\n  padding: 0;\\n  background-color: #1a1a2e;\\n  color: #e0e0e0;\\n}\\n\\nheader {\\n  background-color: #2a2a4e;\\n  padding: 15px 20px;\\n  box-shadow: 0 2px 5px rgba(0,0,0,0.2);\\n}\\n\\nnav button {\\n  background: none;\\n  border: none;\\n  color: #88f;\\n  font-size: 18px;\\n  margin-right: 20px;\\n  cursor: pointer;\\n  transition: color 0.3s ease;\\n}\\n\\nnav button:hover {\\n  color: #fff;\\n}\\n\\nmain {\\n  padding: 20px;\\n}\\n\\n.page {\\n  padding: 30px;\\n  background-color: #2a2a4e;\\n  border-radius: 8px;\\n  margin-bottom: 20px;\\n}\\n\\nh1, h2, h3 {\\n  color: #99f;\\n}\\n\\n@media (max-width: 768px) {\\n  nav {\\n    display: flex;\\n    flex-direction: column;\\n    align-items: center;\\n  }\\n  nav button {\\n    margin: 5px 0;\\n  }\\n}",
-  "js": "function navigateTo(pageId) {\\n  document.querySelectorAll('.page').forEach(page => {\\n    page.style.display = 'none';\\n  });\\n  document.getElementById(pageId).style.display = 'block';\\n\\n  const url = new URL(window.location);\\n  url.hash = pageId;\\n  window.history.pushState({}, '', url);\\n}\\n\\ndocument.addEventListener(\\"DOMContentLoaded\\", () => {\\n  const initialPage = window.location.hash ? window.location.hash.substring(1) : 'home-page';\\n  navigateTo(initialPage);\\n});\\n\\nwindow.addEventListener('popstate', () => {\\n  const pageFromHash = window.location.hash ? window.location.hash.substring(1) : 'home-page';\\n  navigateTo(pageFromHash);\\n});"
+  "html": "<!-- FULL HTML CODE HERE, ESCAPED DOUBLE QUOTES -->",
+  "css": "/* FULL CSS CODE HERE, ESCAPED DOUBLE QUOTES */",
+  "js": "// FULL JAVASCRIPT CODE HERE, ESCAPED DOUBLE QUOTES"
 }
 \`\`\`
-
-Crucial Rules:
-- ALWAYS wrap your final JSON output in triple backticks (e.g., \`\`\`json{...}\`\`\`).
-- ONLY output the JSON structure within the triple backticks. Do NOT include any conversational text or explanation outside of it.
-- Ensure all double quotes within the JSON content are properly escaped (\\").
-- Provide the FULL content for each file type.`;
+- The JSON object must contain "html", "css", and "js" keys.
+- Provide the FULL content for each file type as a single string value.
+- Ensure ALL double quotes within the HTML, CSS, and JS content are properly escaped (e.g., use \\" instead of ").
+- DO NOT include any conversational text, explanations, or additional markdown outside of the \`\`\`json...\`\`\` block. Only the JSON.
+`;
 
     try {
         const response = await fetch(OPENROUTER_API_URL, {
@@ -86,7 +83,7 @@ Crucial Rules:
                     { role: 'system', content: systemInstruction },
                     { role: 'user', content: userProblem }
                 ],
-                temperature: 0.7,
+                temperature: 0.5, // Adjusted for stricter adherence to format
                 max_tokens: 3000,
             }),
         });
